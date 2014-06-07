@@ -1,0 +1,33 @@
+{
+  "name": "io.pinf.server.auth",
+  "version": "0.0.0",
+  "private": true,
+  "pm": "npm",
+  "dependencies": {
+    "smi.cli": "0.x",
+    "passport": "~0.2.0",
+    "passport-github": "~0.1.5"
+  },
+  "scripts": {
+    "install": "./node_modules/.bin/smi install"
+  },
+  "upstream": {
+    "packages": {
+      "top": [
+        "../../*",
+        "../../../../*"
+      ]
+    }
+  },
+  "mappings": {
+    "io.pinf.server.www": "top/io.pinf.server.www"
+  },
+  "config": {
+    "smi.cli": {
+      "packagesDirectory": "node_modules"
+    },
+    "pio.deploy.converter": {
+      "name": "nodejs-server"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+
+{{? view.authorized.github }}
+
+	({{=view.authorized.github.username}}) <a href="/logout/github">Logout</a>
+
+{{??}}
+
+	<a href="/login/github">Login with Github</a>
+
+{{?}}
