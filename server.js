@@ -236,7 +236,6 @@ require("io.pinf.server.www").for(module, __dirname, function(app, config, HELPE
 
 });
 
-
 function resolveGroups(r, config, userInfo, callback) {
 
     const DB_NAME = "devcomp";
@@ -281,7 +280,7 @@ function resolveGroups(r, config, userInfo, callback) {
         });
     }
     function getTeamInfo(orgName, teamName, callback) {
-        return res.r.getCached(DB_NAME, TABLE_NAME, "cache", "github.org['" + orgName + "'].team['" + teamName + "']", function(err, cached, teamCache) {
+        return r.getCached(DB_NAME, TABLE_NAME, "cache", "github.org['" + orgName + "'].team['" + teamName + "']", function(err, cached, teamCache) {
             if (err) return callback(err);
             // TODO: Force cache refresh if requested!
             if (cached) return callback(null, cached);
@@ -292,7 +291,7 @@ function resolveGroups(r, config, userInfo, callback) {
                 }
                 for (var i = teams.length ; i>0 ; i--) {
                     if (teams[i-1].slug === teamName) {
-                        return res.r.getCached(DB_NAME, TABLE_NAME, "cache", "github.org['" + orgName + "'].team['" + teamName + "'].members", function(err, cached, membersCache) {
+                        return r.getCached(DB_NAME, TABLE_NAME, "cache", "github.org['" + orgName + "'].team['" + teamName + "'].members", function(err, cached, membersCache) {
                             if (err) return callback(err);
 
                             return callGithub("/teams/" + teams[i-1].id + "/members", function(err, res, members) {
@@ -317,7 +316,7 @@ function resolveGroups(r, config, userInfo, callback) {
         });
     }
     function isMemberOfTeam(orgName, teamName, callback) {
-        return res.r.getCached(DB_NAME, TABLE_NAME, "cache", "github.org['" + orgName + "'].team['" + teamName + "'].members", function(err, members) {
+        return r.getCached(DB_NAME, TABLE_NAME, "cache", "github.org['" + orgName + "'].team['" + teamName + "'].members", function(err, members) {
             if (err) return callback(err);
             if (!members) {
                 return callback(new Error("An OWNER must login before any other user to populate admin members!"));
