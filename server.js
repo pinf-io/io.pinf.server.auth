@@ -70,7 +70,7 @@ require("io.pinf.server.www").for(module, __dirname, function(app, config, HELPE
             delete req.session.authorized.github;
         }
         // If only groups and roles present.
-        if (Object.keys(req.session.authorized).length === 2) {
+        if (typeof req.session.authorized === "object" && Object.keys(req.session.authorized).length === 2) {
             req.session.authorized = null;
         }
     }
@@ -134,7 +134,12 @@ require("io.pinf.server.www").for(module, __dirname, function(app, config, HELPE
                     if (req.session.requested.github.scope.indexOf(err.requestScope) === -1) {
                         req.session.requested.github.scope.push(err.requestScope);
                     }
-                    delete req.session.authorized.github;
+                    if (
+                        req.session.authorized &&
+                        req.session.authorized.github
+                    ) {
+                        delete req.session.authorized.github;
+                    }
                     res.writeHead(302, {
                         "Location": "/login/github?why=elevated-oauth-scope"
                     });
@@ -286,6 +291,7 @@ function resolveGroups(r, config, userInfo, callback) {
         });
     }
     function getTeamInfo(orgName, teamName, callback) {
+        console.log("getTeamInfo", orgName, teamName);
         return r.getCached(DB_NAME, TABLE_NAME, "cache", "github.org['" + orgName + "'].team['" + teamName + "']", function(err, cached, teamCache) {
             if (err) return callback(err);
             // TODO: Force cache refresh if requested!
@@ -322,6 +328,7 @@ function resolveGroups(r, config, userInfo, callback) {
         });
     }
     function isMemberOfTeam(orgName, teamName, callback) {
+        console.log("isMemberOfTeam", orgName, teamName);
         return r.getCached(DB_NAME, TABLE_NAME, "cache", "github.org['" + orgName + "'].team['" + teamName + "'].members", function(err, members) {
             if (err) return callback(err);
             if (!members) {
@@ -338,9 +345,7 @@ function resolveGroups(r, config, userInfo, callback) {
     if (config && config.groups) {
         for (var name in config.groups) {
             waitfor(name, function (name, callback) {
-
                 console.log("Resolve group '" + name + "' for user '" + userInfo.username + "'");
-
                 if (/^https?:\/\/github\.com\/\*$/.test(config.groups[name].inherits)) {                    
                     authorizedGroups.push(name);
                     authorizedRoles.push(config.groups[name].role);                    
@@ -361,7 +366,7 @@ function resolveGroups(r, config, userInfo, callback) {
                         });
                     });
                 }
-                return callback();
+                return callback(null);
             });
         }
     }
