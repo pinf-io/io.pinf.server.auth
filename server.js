@@ -90,6 +90,11 @@ require("io.pinf.server.www").for(module, __dirname, function(app, config, HELPE
         return res.end();
     });
 
+    app.get(/^\/login\/fail$/, function(req, res, next) {
+        console.log("SESSION ON FAIL", req.session);
+        return next();
+    });
+
     app.get(/^\/login\/github$/, function(req, res, next) {
         if (
             req.session.requested &&
@@ -105,11 +110,12 @@ require("io.pinf.server.www").for(module, __dirname, function(app, config, HELPE
         }
         return next();
     }, passport.authenticate("github", {
-        failureRedirect: "/login/fail"
+        failureRedirect: "/login/fail?reason=NO_PASSPORT_USER"
     }), function(req, res, next) {
         if (!req.session.passport || !req.session.passport.user || !req.session.passport.user.id) {
+            console.log("Redirect to fail.", "req.session", req.session);
             res.writeHead(302, {
-                "Location": "/login/fail"
+                "Location": "/login/fail?reason=NO_SESSION"
             });
             return res.end();
         }
