@@ -70,7 +70,7 @@ require("io.pinf.server.www").for(module, __dirname, function(app, config, HELPE
             delete req.session.authorized.github;
         }
         // If only groups and roles present.
-        if (typeof req.session.authorized === "object" && Object.keys(req.session.authorized).length === 2) {
+        if (req.session.authorized && typeof req.session.authorized === "object" && Object.keys(req.session.authorized).length === 2) {
             req.session.authorized = null;
         }
     }
@@ -96,6 +96,33 @@ require("io.pinf.server.www").for(module, __dirname, function(app, config, HELPE
     });
 
     app.get(/^\/login\/github$/, function(req, res, next) {
+        if (req.query) {
+            if (req.query.returnTo) {
+                req.session.redirectAfterLogin = req.query.returnTo;
+            }
+            if (req.query.requestScope) {
+                if (!req.session.requested) {
+                    req.session.requested = {};
+                }
+                if (!req.session.requested.github) {
+                    req.session.requested.github = {};
+                }
+                if (!req.session.requested.github.scope) {
+                    req.session.requested.github.scope = [];
+                }
+                // TODO: Do more advanced scope matching? i.e. some scopes include other scopes.
+                if (req.session.requested.github.scope.indexOf(req.query.requestScope) === -1) {
+                    req.session.requested.github.scope.push(req.query.requestScope);
+                }
+            }
+        }
+        function unique(_scopes) {
+            var scopes = {};
+            _scopes.forEach(function(scope) {
+                scopes[scope] = true;
+            });
+            return Object.keys(scopes);
+        }
         if (
             req.session.requested &&
             req.session.requested.github &&
@@ -103,11 +130,19 @@ require("io.pinf.server.www").for(module, __dirname, function(app, config, HELPE
         ) {
             req.session.passport = {};
             logoutGithub(req);
-            passport._strategies.github._scope = configuredScopes.concat(req.session.requested.github.scope).join(",");
+            passport._strategies.github._scope = unique(configuredScopes.concat(req.session.requested.github.scope).concat((req.session.keep && req.session.keep.github && req.session.keep.github.scope) || [])).join(",");
             delete req.session.requested.github.scope;
         } else {
-            passport._strategies.github._scope = configuredScopes.join(",");
+            passport._strategies.github._scope = unique(configuredScopes.concat((req.session.keep && req.session.keep.github && req.session.keep.github.scope) || [])).join(",");
         }
+        if (!req.session.keep) {
+            req.session.keep = {};
+        }
+        if (!req.session.keep.github) {
+            req.session.keep.github = {};
+        }
+        req.session.keep.github.scope = passport._strategies.github._scope.split(",");
+console.log("before login", JSON.stringify(req.session, null, 4));
         return next();
     }, passport.authenticate("github", {
         failureRedirect: "/login/fail?reason=NO_PASSPORT_USER"
@@ -151,11 +186,19 @@ require("io.pinf.server.www").for(module, __dirname, function(app, config, HELPE
             if (!req.session.authorized) {
                 req.session.authorized = {};
             }
-            req.session.authorized.github = req.session.passport.user;
+            req.session.authorized.github = JSON.parse(JSON.stringify(req.session.passport.user));
+            req.session.authorized.github.links = {
+                // TODO: Subdomain and port as well as host should come from config.
+                // TODO: Make session id hostname agnostic if using equivalent hostnames.
+                //"requestScope": "http://io-pinf-server-auth." + req.headers.host + ":8013/login/github?requestScope={{scope}}&returnTo={{callback}}"
+                "requestScope": "http://" + req.headers.host + "/login/github?requestScope={{scope}}&returnTo={{callback}}"
+            };
+            req.session.authorized.github.scope = req.session.keep.github.scope;
             req.session.passport = {};
 
             req.session.authorized.groups = groups;
             req.session.authorized.roles = roles;
+console.log("after login", JSON.stringify(req.session, null, 4));
 
             if (req.session.redirectAfterLogin && req.session.redirectAfterLogin.indexOf(pioConfig.config.pio.hostname) === -1) {
                 return next(new Error("'req.session.redirectAfterLogin' does not point to hostname '" + pioConfig.config.pio.hostname + "'!"));
