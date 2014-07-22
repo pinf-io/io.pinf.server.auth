@@ -100,7 +100,7 @@ require("io.pinf.server.www").for(module, __dirname, function(app, config, HELPE
             if (req.query.returnTo) {
                 req.session.redirectAfterLogin = req.query.returnTo;
             }
-            if (req.query.requestScope) {
+            if (typeof req.query.requestScope !== "undefined") {
                 if (!req.session.requested) {
                     req.session.requested = {};
                 }
@@ -110,10 +110,7 @@ require("io.pinf.server.www").for(module, __dirname, function(app, config, HELPE
                 if (!req.session.requested.github.scope) {
                     req.session.requested.github.scope = [];
                 }
-                // TODO: Do more advanced scope matching? i.e. some scopes include other scopes.
-                if (req.session.requested.github.scope.indexOf(req.query.requestScope) === -1) {
-                    req.session.requested.github.scope.push(req.query.requestScope);
-                }
+                req.session.requested.github.scope = req.session.requested.github.scope.concat(req.query.requestScope.split(","));
             }
         }
         function unique(_scopes) {
@@ -142,7 +139,7 @@ require("io.pinf.server.www").for(module, __dirname, function(app, config, HELPE
             req.session.keep.github = {};
         }
         req.session.keep.github.scope = passport._strategies.github._scope.split(",");
-console.log("before login", JSON.stringify(req.session, null, 4));
+//console.log("before login", JSON.stringify(req.session, null, 4));
         return next();
     }, passport.authenticate("github", {
         failureRedirect: "/login/fail?reason=NO_PASSPORT_USER"
@@ -156,7 +153,7 @@ console.log("before login", JSON.stringify(req.session, null, 4));
         }
         return resolveGroups(res.r, config, req.session.passport.user, function(err, groups, roles) {
             if (err) {
-                if (err.code === 403 && err.requestScope) {
+                if (err.code === 403 && typeof err.requestScope !== "undefined") {
                     if (!req.session.requested) {
                         req.session.requested = {};
                     }
@@ -186,6 +183,9 @@ console.log("before login", JSON.stringify(req.session, null, 4));
             if (!req.session.authorized) {
                 req.session.authorized = {};
             }
+            req.session.authorized.links = {
+                "fetch": "http://" + req.headers.host + "/user/session/authorized?session-auth-code={{session-auth-code}}"
+            };
             req.session.authorized.github = JSON.parse(JSON.stringify(req.session.passport.user));
             req.session.authorized.github.links = {
                 // TODO: Subdomain and port as well as host should come from config.
@@ -205,12 +205,18 @@ console.log("after login", JSON.stringify(req.session, null, 4));
             }
 
             if (req.session.sessionAuthCodeAfterLogin) {
+                req.session.keep.temporaryAuthCode = req.session.sessionAuthCodeAfterLogin;
                 temporaryAuthCodes[req.session.sessionAuthCodeAfterLogin] = DEEPCOPY(req.session.authorized);
                 delete req.session.sessionAuthCodeAfterLogin;
+            } else
+            if (req.session.keep && req.session.keep.temporaryAuthCode) {
+                temporaryAuthCodes[req.session.keep.temporaryAuthCode] = DEEPCOPY(req.session.authorized);
             }
 
+            var redirectTo = req.session.redirectAfterLogin || config.loggedInRedirect || "/";
+            console.log("Redirecting to:", redirectTo);
             res.writeHead(302, {
-                "Location": req.session.redirectAfterLogin || "/"
+                "Location": redirectTo
             });
             delete req.session.redirectAfterLogin;
             return res.end();
@@ -239,12 +245,16 @@ console.log("after login", JSON.stringify(req.session, null, 4));
     app.get(/^\/user\/session\/authorized$/, function(req, res, next) {
         if (
             req.query["session-auth-code"] &&
+            req.query["session-auth-code"] !== "sidcookie" &&
             temporaryAuthCodes[req.query["session-auth-code"]]
         ) {
             var payload = temporaryAuthCodes[req.query["session-auth-code"]];
-            delete temporaryAuthCodes[req.query["session-auth-code"]];
+// NOTE: We don't delete this code any more as we treat it as a token.
+// TODO: Use a proper token exchange lib.
+//            delete temporaryAuthCodes[req.query["session-auth-code"]];
             payload.$status = 200;
             payload = JSON.stringify(payload, null, 4);
+            payload = payload.replace(/\{\{session-auth-code\}\}/g, req.query["session-auth-code"]);
             res.writeHead(200, {
                 "Content-Type": "application/json",
                 "Content-Length": payload.length
@@ -273,6 +283,7 @@ console.log("after login", JSON.stringify(req.session, null, 4));
         var payload = DEEPCOPY(req.session.authorized);
         payload.$status = 200;
         payload = JSON.stringify(payload, null, 4);
+        payload = payload.replace(/\{\{session-auth-code\}\}/g, "sidcookie");
         res.writeHead(200, {
             "Content-Type": "application/json",
             "Content-Length": payload.length
@@ -286,6 +297,14 @@ console.log("after login", JSON.stringify(req.session, null, 4));
             "Location": "/"
         });
         return res.end();
+    });
+
+    app.get(/^\/$/, function(req, res, next) {
+        if (res.view.authorized && config.loggedInRedirect) {
+            console.log("Redirecting to '" + config.loggedInRedirect + "' due to 'loggedInRedirect' config.");
+            return res.redirect(config.loggedInRedirect);
+        }
+        return next();
     });
 
 });
