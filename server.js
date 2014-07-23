@@ -7,6 +7,8 @@ const PASSPORT_GITHUB = require("passport-github");
 const REQUEST = require("request");
 const WAITFOR = require("waitfor");
 const DEEPCOPY = require("deepcopy");
+const UUID = require("uuid");
+const CRYPTO = require("crypto");
 
 
 var passport = null;
@@ -83,6 +85,7 @@ require("io.pinf.server.www").for(module, __dirname, function(app, config, HELPE
         if (req.query["session-auth-code"]) {
             req.session.sessionAuthCodeAfterLogin = req.query["session-auth-code"];
         }
+console.log("Set redirectAfterLogin to '" + req.query.callback + "' for /authorize/github");        
         req.session.redirectAfterLogin = req.query.callback;
         res.writeHead(302, {
             "Location": "/login/github"
@@ -98,6 +101,7 @@ require("io.pinf.server.www").for(module, __dirname, function(app, config, HELPE
     app.get(/^\/login\/github$/, function(req, res, next) {
         if (req.query) {
             if (req.query.returnTo) {
+console.log("Set redirectAfterLogin to '" + req.query.returnTo + "' for /login/github");        
                 req.session.redirectAfterLogin = req.query.returnTo;
             }
             if (typeof req.query.requestScope !== "undefined") {
@@ -200,10 +204,8 @@ require("io.pinf.server.www").for(module, __dirname, function(app, config, HELPE
             req.session.authorized.roles = roles;
 console.log("after login", JSON.stringify(req.session, null, 4));
 
-            if (req.session.redirectAfterLogin && req.session.redirectAfterLogin.indexOf(pioConfig.config.pio.hostname) === -1) {
-                return next(new Error("'req.session.redirectAfterLogin' does not point to hostname '" + pioConfig.config.pio.hostname + "'!"));
-            }
-
+            var redirectTo = req.session.redirectAfterLogin;
+console.log("req.session.sessionAuthCodeAfterLogin", req.session.sessionAuthCodeAfterLogin);
             if (req.session.sessionAuthCodeAfterLogin) {
                 req.session.keep.temporaryAuthCode = req.session.sessionAuthCodeAfterLogin;
                 temporaryAuthCodes[req.session.sessionAuthCodeAfterLogin] = DEEPCOPY(req.session.authorized);
@@ -212,8 +214,23 @@ console.log("after login", JSON.stringify(req.session, null, 4));
             if (req.session.keep && req.session.keep.temporaryAuthCode) {
                 temporaryAuthCodes[req.session.keep.temporaryAuthCode] = DEEPCOPY(req.session.authorized);
             }
+            if (!redirectTo && config.loggedInRedirect) {
+                var sessionAuthCode = UUID.v4();
+                req.session.keep.temporaryAuthCode = sessionAuthCode;
+                temporaryAuthCodes[sessionAuthCode] = DEEPCOPY(req.session.authorized);
+                var authCode = CRYPTO.createHash("sha1");
+                authCode.update(["auth-code", pioConfig.config.pio.instanceId, pioConfig.config.pio.instanceSecret].join(":"));
+                authCode = authCode.digest("hex");
+                var accessProof = CRYPTO.createHash("sha1");                    
+                accessProof.update(["access-proof", authCode, pioConfig.config.pio.hostname].join(":"));
+                redirectTo = config.loggedInRedirect + "?session-auth-code=" + sessionAuthCode + "&session-auth-code-ap=" + accessProof.digest("hex");
+            }
 
-            var redirectTo = req.session.redirectAfterLogin || config.loggedInRedirect || "/";
+            if (redirectTo && redirectTo.indexOf(pioConfig.config.pio.hostname) === -1) {
+                return next(new Error("'redirectTo' does not point to hostname '" + pioConfig.config.pio.hostname + "'!"));
+            }
+
+            redirectTo = redirectTo || "/";
             console.log("Redirecting to:", redirectTo);
             res.writeHead(302, {
                 "Location": redirectTo
@@ -293,6 +310,15 @@ console.log("after login", JSON.stringify(req.session, null, 4));
 
     app.get(/^\/logout\/github$/, function(req, res) {
         logoutGithub(req);
+        res.writeHead(302, {
+            "Location": "/"
+        });
+        return res.end();
+    });
+
+    app.get(/^\/logout$/, function(req, res) {
+        // TODO: Logout all relevant accounts.
+        req.session.destroy();
         res.writeHead(302, {
             "Location": "/"
         });
