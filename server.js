@@ -20,15 +20,15 @@ require("io.pinf.server.www").for(module, __dirname, function(app, config, HELPE
 	config = config.config;
 
     ASSERT.equal(typeof config.passport.github.clientID, "string");
-    ASSERT.equal(typeof config.passport.github.clientID, "string");
     ASSERT.equal(typeof config.passport.github.clientSecret, "string");
     ASSERT.equal(typeof config.passport.github.callbackURL, "string");
     ASSERT.equal(typeof config.passport.github.scope, "string");
 
     if (!config.passport.github.clientID) {
+        console.log("Authentication service is not configured! (set 'config.passport.github.*' properties to configure)");
         app.use(function (req, res, next) {
             res.writeHead(500);
-            return res.end("Authentication service is not configured!");
+            return res.end("Authentication service is not configured! (set 'config.passport.github.*' properties to configure)");
         });
         return;
     }
@@ -182,6 +182,11 @@ console.log("Set redirectAfterLogin to '" + req.query.returnTo + "' for /login/g
                     return res.end();
                 }
                 return next(err);
+            }
+
+            if (groups.length === 0 && roles.length === 0) {
+                console.log("User does not belong to any groups and has no roles. So we deny login:", req.session.passport.user);
+                return res.redirect("/logout");
             }
 
             if (!req.session.authorized) {
