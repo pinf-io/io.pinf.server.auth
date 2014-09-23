@@ -9,6 +9,7 @@ const WAITFOR = require("waitfor");
 const DEEPCOPY = require("deepcopy");
 const UUID = require("uuid");
 const CRYPTO = require("crypto");
+const ESCAPE_REGEXP_COMPONENT = require("escape-regexp-component");
 
 
 var passport = null;
@@ -231,12 +232,34 @@ console.log("req.session.sessionAuthCodeAfterLogin", req.session.sessionAuthCode
                 redirectTo = config.loggedInRedirect + "?session-auth-code=" + sessionAuthCode + "&session-auth-code-ap=" + accessProof.digest("hex");
             }
 
-            if (redirectTo && redirectTo.indexOf(pioConfig.config.pio.hostname) === -1) {
-                return next(new Error("'redirectTo' does not point to hostname '" + pioConfig.config.pio.hostname + "'!"));
+            redirectTo = redirectTo || "/";
+            console.log("Trying to redirect to:", redirectTo);
+
+            if (
+                !/^\//.test(redirectTo) && 
+                !(new RegExp("^https?:\\/\\/([^\\/]+\\.)?" + ESCAPE_REGEXP_COMPONENT(pioConfig.config.pio.hostname) + "(:\\d+)?\\/")).test(redirectTo)
+            ) {
+                console.log("Not redirecting to own hostname '" + pioConfig.config.pio.hostname + "' so we need to check redirect rules.");
+                var allow = false;
+                if (
+                    config.redirect &&
+                    config.redirect.hosts
+                ) {
+                    config.redirect.hosts.forEach(function (rule) {
+                        if (allow) return;
+                        allow = (new RegExp("^https?:\\/\\/" + rule + "(:\\d+)?\\/")).test(redirectTo)
+                        if (allow) {
+                            console.log("Allowing redirect to '" + redirectTo + "' as host is in allowed config matching rule: " + rule);
+                        }
+                    });
+                }
+                if (!allow) {
+                    return next(new Error("'redirectTo' does not point to hostname '" + pioConfig.config.pio.hostname + "' nor is it a local redirect nor allowed host!"));
+                }
             }
 
-            redirectTo = redirectTo || "/";
             console.log("Redirecting to:", redirectTo);
+
             res.writeHead(302, {
                 "Location": redirectTo
             });
