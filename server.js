@@ -67,6 +67,7 @@ require("io.pinf.server.www").for(module, __dirname, function(app, config, HELPE
     if (!passport) return;
 
     var configuredScopes = config.passport.github.scope.replace(/\s/g, "").split(",");
+    configuredScopes.push("read:org");
 
     function logoutGithub(req) {
         if (req.session.authorized && req.session.authorized.github) {
