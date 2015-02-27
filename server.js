@@ -466,7 +466,9 @@ function resolveGroups(r, config, userInfo, callback) {
                 if (/^https?:\/\/github\.com\/\*$/.test(config.groups[name].inherits)) {                    
                     authorizedGroups.push(name);
                     authorizedRoles.push(config.groups[name].role);                    
-                } else {
+                } else
+                if (config.groups[name].inherits) {
+
                     var m = config.groups[name].inherits.match(/^https?:\/\/github\.com\/orgs\/([^\/]+)\/teams\/([^\/]+)$/);
                     if (!m) {
                         return callback(new Error("Inherits URI '" + config.groups[name].inherits + "' not supported! This is a config issue."));
